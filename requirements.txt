@@ -1,0 +1,12 @@
+jax
+pgx>=2.0.0
+dm-haiku
+optax
+flax
+flashbax
+distrax
+omegaconf
+pydantic
+wandb
+rlax 
+pytest
