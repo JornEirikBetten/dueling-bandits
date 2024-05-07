@@ -10,3 +10,8 @@ pydantic
 wandb
 rlax 
 pytest
+cuda-python 
+tensorflow
+gymnasium
+vowpalwabbit
+plotnine
