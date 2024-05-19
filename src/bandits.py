@@ -35,3 +35,18 @@ class GaussianBandit(MultiArmedBandit):
                 action == self.optimal)
         
         
+        
+class BernoulliBandit(MultiArmedBandit): 
+    def __init__(self, k, rng):
+        super(BernoulliBandit, self).__init__(k)
+        self._rng = rng 
+        
+    def reset(self): 
+        self.action_values = self._rng.random(size=(self.k))
+        self.optimal = np.argmax(self.action_values) 
+        self.mean_optimal_reward = np.max(self.action_values)
+        
+    def pull(self, action):
+        draw = self._rng.random() 
+        return (draw < self.action_values[action], 
+                action == self.optimal) 

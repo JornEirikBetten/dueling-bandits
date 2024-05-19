@@ -96,25 +96,19 @@ class Environment:
             
             
 class BanditSolver: 
+    """
+            MULTI-ARMED BANDIT SOLVER 
+    """
     def __init__(self, bandit, rng): 
         self.bandit = bandit 
         self.rng = rng 
         
-        
-        
     def reset(self):
         self.bandit.reset()
     
-    
-    """
-            MULTI-ARMED BANDIT
-    """
-    
-    def explore_first(self, nrounds, nexplores): 
+    def explore_first(self, nrounds): 
         k = self.bandit.k 
-        if nrounds < nexplores*k:
-            print("Not enough rounds to explore that much.") 
-            return  0
+        nexplores = int((nrounds/k)**(2./3))
         mean_rewards = np.zeros(k)
         rewards = np.zeros(nrounds)
         optimals = np.zeros(nrounds)
@@ -210,12 +204,47 @@ class BanditSolver:
             t += 1
         best_action = np.argmax(mean_rewards) 
         return best_action, rewards, optimals 
+    
+    def upper_confidence_bound(self, nrounds): 
+        k = self.bandit.k 
+        rewards = np.zeros(nrounds)
+        optimals = np.zeros(nrounds)
+        n_trials = np.zeros(k)
+        mean_rewards = np.zeros(k)
+        total_rewards = np.zeros(k)
+        uncertainties = np.zeros(k)
+        ucbs = np.zeros(k)
+        # Sweep all actions once
+        for action in range(k): 
+            reward, is_optimal = self.bandit.pull(action)
+            rewards[action] = reward 
+            optimals[action] = is_optimal
+            n_trials[action] += 1 
+            total_rewards[action] += reward 
+            mean_rewards[action] = reward 
+            uncertainties[action] = np.sqrt(2*np.log(nrounds))
+            ucbs[action] = mean_rewards[action] + uncertainties[action]
+        # Pick maximum UCB
+        for t in range(k, nrounds, 1): 
+            action = np.argmax(ucbs)
+            reward, is_optimal = self.bandit.pull(action)
+            rewards[t] = reward; optimals[t] = is_optimal
+            n_trials[action] += 1 
+            total_rewards[action] += reward
+            mean_rewards[action] = total_rewards[action]/n_trials[action]
+            uncertainties[action] = np.sqrt(2*np.log(nrounds)/n_trials[action])
+            ucbs[action] = mean_rewards[action] + uncertainties[action]
+        best_action = np.argmax(ucbs)
+        return best_action, rewards, optimals
+        
             
     def successive_elimination(self, nrounds):
+        k = self.bandit.k 
         mean_rewards = np.zeros(self.bandit.k) 
         rewards = np.zeros(nrounds)
         optimals = np.zeros(nrounds)
         n_trials = np.zeros(self.bandit.k)
+        total_rewards = np.zeros(k)
         upper_confidence_bounds = np.zeros(self.bandit.k)
         lower_confidence_bounds = np.zeros(self.bandit.k)
         active_actions = [action for action in range(self.bandit.k)]
@@ -230,7 +259,8 @@ class BanditSolver:
                 if t == nrounds: 
                     break
                 n_trials[action] += 1
-                mean_rewards[action] = mean_rewards[action]*(n_trials[action]-1)/n_trials[action] + reward/n_trials[action] 
+                total_rewards[action] += reward 
+                mean_rewards[action] = total_rewards[action]/n_trials[action]
                 r = np.sqrt(2*np.log(nrounds)/n_trials[action])
                 upper_confidence_bounds[action] = mean_rewards[action] + r 
                 lower_confidence_bounds[action] = mean_rewards[action] - r 
@@ -257,8 +287,8 @@ class BanditSolver:
         optimals = np.zeros(nrounds)
         n_trials = np.zeros(self.bandit.k)
         # Define priors 
-        alphas = 1000*np.ones(k)
-        betas = 1000*np.ones(k)
+        alphas = np.ones(k)
+        betas = np.ones(k)
         for t in range(nrounds): 
             samples = np.zeros(k)
             for action in range(k): 
@@ -271,7 +301,7 @@ class BanditSolver:
             betas[action] += 1 - reward 
         samples = np.zeros(k)
         for action in range(k): 
-            samples[k] = self.rng.beta(alphas[action], betas[action])
+            samples[action] = self.rng.beta(alphas[action], betas[action])
         best_action = np.argmax(samples)
         return best_action, rewards, optimals
                 
@@ -318,59 +348,67 @@ class BanditSolver:
             total_rewards_squared[action] += reward*reward 
             means[action] = total_rewards[action]/n_trials[action]
             sigmas[action] = np.sqrt(n_trials[action]*total_rewards_squared[action] - total_rewards[action]*total_rewards[action])/n_trials[action]   
+        
+        best_action = action 
+        return best_action, rewards, optimals
+    
+    def boltzmann_reward_model(self, nrounds): 
+        """Boltzmann reward model. For each action, the mean reward is collected and 
+        the action distribution is modeled as a Boltzmann
+        Args:
+            nrounds (_type_): _description_
+        """
+        k = self.bandit.k 
+        rewards = np.zeros(nrounds)
+        optimals = np.zeros(nrounds)
+        means = np.zeros(k)
+        sigmas = np.zeros(k)
+        # Update moments
+        n_trials = np.zeros(k)
+        total_rewards = np.zeros(k)
+        # One sweep for priors
+        for action in range(k): 
+            reward, is_optimal = self.bandit.pull(action)
+            rewards[action] = reward 
+            optimals[action] = is_optimal
+            means[action] = reward 
+            # Update moments
+            n_trials[action] += 1 
+            total_rewards[action] = reward 
             
-            #if n_trials[action]>1: 
-                #first_term = (n_trials[action]-2)*sigmas[action]**2
-                #second_term = (n_trials[action]-1)*(old_mean - means[action])**2
-                #final_term = (reward - means[action])**2 
-                
-                #sigmas[action] = np.sqrt((first_term + second_term + final_term)/(n_trials[action]-1))
-            #else: 
-                #sigmas[action] = np.sqrt(())
+
+        for t in range(k, nrounds, 1): 
+            probabilities = np.exp(means*10)/np.sum(np.exp(means*10))
+            action = self.rng.choice(k, p=probabilities)    
+            reward, is_optimal = self.bandit.pull(action) 
+            rewards[t] = reward 
+            optimals[t] = is_optimal
+            # Update moments
+            n_trials[action] += 1
+            total_rewards[action] += reward 
+            means[action] = total_rewards[action]/n_trials[action]
         
         best_action = action 
         return best_action, rewards, optimals
             
-    # def thompson_sampling_gaussian(self, nrounds): 
-    #     k = self.bandit.k 
-    #     means = np.zeros(k)
-    #     n_trials = np.zeros(k)
-    #     scales = np.zeros(k)
-    #     data =  {
-    #         "means" = [], 
-    #         "scales" = []
-    #             }
-    #     rewards = np.zeros(nrounds)
-    #     optimals = np.zeros(nrounds)
-    #     for action in range(k): 
-    #         reward, is_optimal = self.bandit.pull(action)
-    #         means[action] = reward 
-    #         scales[action] = 0 
-    #         data.means.append(reward)
-    #         data.scales.append(scales[action])
-    #         n_trials[action] += 1
-    #         optimals[action] = is_optimal 
-    #         rewards[k] = reward 
-            
-            
-    #     for t in range(k, nrounds, 1): 
-    #         samples = np.zeros(k)
-    #         for action in range(k): 
-    #              samples[k] = self.rng.normal(loc=means[k], scale=scales[k])
-                 
-    #         action = np.argmax(samples)
-            
-    #         n_trials[action] += 1 
-    #         reward, is_optimal = self.bandit.pull(action)
-    #         rewards[t] = reward 
-    #         optimals[t] = is_optimal
-    #         means[action] = 
+    #
+        
+class DuelingBanditSolver: 
+    """
+            DUELING BANDITS SOLVER 
+    Algorithms:   
+        Interleaved filter 
+        Double Thompson Sampling       
+    """
+    def __init__(self, bandit, rng): 
+        self.bandit = bandit 
+        self.rng = rng 
         
         
-    
-    """
-                DUELING BANDITS 
-    """
+        
+    def reset(self):
+        self.bandit.reset()
+        
     def interleaved_filter(self, nrounds):
         """Dueling bandits interleaved filter algorithm. 
 

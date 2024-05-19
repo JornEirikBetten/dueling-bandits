@@ -84,3 +84,14 @@ plt.legend()
 ax.set_xlabel("rounds")
 ax.set_ylabel("optimal fraction")
 plt.savefig("optimals.pdf", format="pdf", bbox_inches="tight")
+
+
+
+
+#Actor-critic 
+def one_step_rollout(state):
+    Q_vals = []
+    for action in actions: 
+        new_state = env.step(action)
+        logits, critic = forward(new_state)
+        Q_vals.append(critic)
