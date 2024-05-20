@@ -1,9 +1,10 @@
-# Reinforcement Learning using Human Feedback
-Reinforcement learning from human feedback. 
+# Multi-Armed Bandits and Dueling Bandits 
+This repository contains the code and PDF connected to the Dueling Bandit assignment of the course PENG9560 at OsloMet. 
 
-## Reward modelling 
-From ranking of trajectories, can we learn the reward function? 
 
-## Policy training
-Online learning of rewards and policies. 
-
+## To run 
+```sh
+$ pip install -U pip && pip install -r requirements.txt
+$ python mab_runner.py 
+$ python dueling_runner.py
+```
